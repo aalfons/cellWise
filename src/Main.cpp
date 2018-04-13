@@ -10,7 +10,7 @@ using namespace DDC;
 /*       Main DDCcore function       */
 /*************************************/
 // [[Rcpp::export]]
-Rcpp::List DDC_cpp(arma::mat & X, const double & tolProb, const double & corrlim,
+Rcpp::List DDC_cpp(arma::mat & X, const arma::vec & tolProb, const double & tolProbRow, const double & corrlim,
                    const int & combinRule,const int & rowdetect, const int & includeSelf, 
                    const int & fastDDC, const int & absCorr,
                    const int & qdim, const int & transFun,const int & treetype,
@@ -22,10 +22,15 @@ Rcpp::List DDC_cpp(arma::mat & X, const double & tolProb, const double & corrlim
   try
   {
     
-    const double qCell     = sqrt(R::qchisq(tolProb, 1,true,false));
-    const double qRegr     = sqrt(R::qchisq(tolProb, 1,true,false));
-    const double qRow      = sqrt(R::qchisq(tolProb, 1,true,false));
-    const double qCorr     = R::qchisq(tolProb, 2,true,false);
+    arma::vec qCell(tolProb.n_elem);
+    arma::vec qRegr(tolProb.n_elem);
+    const double qRow = sqrt(R::qchisq(tolProbRow, 1,true,false));
+    arma::vec qCorr(tolProb.n_elem);
+    for (unsigned int i = 0; i < tolProb.n_elem; i++) {
+      qCell(i) = sqrt(R::qchisq(tolProb(i), 1,true,false));
+      qRegr(i) = sqrt(R::qchisq(tolProb(i), 1,true,false));
+      qCorr(i) = R::qchisq(tolProb(i), 2,true,false);
+    }
     
     LocScaleEstimators::Xlocscale locscaleX;
     arma::mat Z = X;
@@ -60,7 +65,7 @@ Rcpp::List DDC_cpp(arma::mat & X, const double & tolProb, const double & corrlim
     
     for (unsigned int i = 0; i < U.n_cols; i++)
     {
-      U.col(i) = limitFilt(Z.col(i), qCell);
+      U.col(i) = limitFilt(Z.col(i), qCell(i));
     }
     
     uvec UniIndex = vdiff(find_nonfinite(U), indNAs); //does not include original missings
@@ -81,7 +86,7 @@ Rcpp::List DDC_cpp(arma::mat & X, const double & tolProb, const double & corrlim
     if (fastDDC == 0) {
       for (unsigned int i = 0; i < U.n_cols; i++)
       {
-        kbestcorr tempresult = kBestCorr(U.col(i), U, i, k, qCorr, precScale);
+        kbestcorr tempresult = kBestCorr(U.col(i), U, i, k, qCorr(i), precScale);
         ngbrs.row(i) = tempresult.selected.t();
         robcors.row(i) = tempresult.corrs.t();
       }
@@ -113,7 +118,7 @@ Rcpp::List DDC_cpp(arma::mat & X, const double & tolProb, const double & corrlim
     
     for (unsigned int i = 0; i < U.n_cols; i++) 
     {
-      robslopes.row(i) = compSlopes(U.col(i), ngb0.row(i).t(), U, qRegr, precScale).t();
+      robslopes.row(i) = compSlopes(U.col(i), ngb0.row(i).t(), U, qRegr(i), precScale).t();
     }
     
     uvec colStandalone = find(sum(corrweight, 1) == 0);
@@ -154,7 +159,7 @@ Rcpp::List DDC_cpp(arma::mat & X, const double & tolProb, const double & corrlim
       
       for (unsigned int i = 0; i < colConnected.size(); i++) {
         Zest.col(colConnected(i)) = deShrink(Zest.col(colConnected(i)),
-                 Z, colConnected(i), qRegr, precScale);
+                 Z, colConnected(i), qRegr(i), precScale);
       }
       
       // Finally, all NAs are replaced by zeroes :
@@ -181,7 +186,12 @@ Rcpp::List DDC_cpp(arma::mat & X, const double & tolProb, const double & corrlim
       // We don't have to scale the standalone columns, as they
       // were already standardized in the beginning.
       // Next, flag outlying cells by their large residuals :
-      indcells = find(arma::abs(Zres) > qCell); // does not flag the NAs as cells
+      // indcells = find(arma::abs(Zres) > qCell); // does not flag the NAs as cells
+      indcells.reset();
+      for (unsigned int i = 0; i < Zres.n_cols; i++) {
+        arma::uvec tmp = find(arma::abs(Zres.unsafe_col(i)) > qCell(i));
+        indcells = join_cols(indcells, tmp + i * Zres.n_rows);
+      }
       U(indcells).fill(datum::nan);
       
     } // ends the iteration

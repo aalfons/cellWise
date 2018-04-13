@@ -126,13 +126,25 @@ DetectDeviatingCells <- function(X, DDCpars = list()){
   
   checkedData <- out$remX + 0 # +0 puts it in new memory, so cpp doesn't change out$remX
   
+  if (is.list(DDCpars$tolProb)) {
+    DDCpars$tolProbRow <- DDCpars$tolProb[[2]]
+    DDCpars$tolProb <- DDCpars$tolProb[[1]]
+  } else if (is.numeric(DDCpars$tolProb)) {
+    if (length(DDCpars$tolProb) == 1) {
+      DDCpars$tolProbRow <- DDCpars$tolProb
+      DDCpars$tolProb <- rep.int(DDCpars$tolProb, ncol(checkedData))
+    } else {
+      DDCpars$tolProbRow <- 0.99
+    }
+  }
+  
   # Carry out the actual DetectDeviatingCells algorithm on
   # the remaining dataset out1$remX :
-  res <- tryCatch( .Call('_cellWise_DDC_cpp', checkedData, DDCpars$tolProb, DDCpars$corrlim,
-                         DDCpars$combinRule, DDCpars$rowdetect, DDCpars$includeSelf,
-                         DDCpars$fastDDC, DDCpars$absCorr, DDCpars$qdim, DDCpars$transFun,
-                         DDCpars$treetype, DDCpars$searchtype, DDCpars$radius, DDCpars$eps,
-                         DDCpars$bruteForce, DDCpars$k, DDCpars$numiter,
+  res <- tryCatch( .Call('_cellWise_DDC_cpp', checkedData, DDCpars$tolProb, DDCpars$tolProbRow, 
+                         DDCpars$corrlim, DDCpars$combinRule, DDCpars$rowdetect, 
+                         DDCpars$includeSelf, DDCpars$fastDDC, DDCpars$absCorr, DDCpars$qdim, 
+                         DDCpars$transFun, DDCpars$treetype, DDCpars$searchtype, DDCpars$radius, 
+                         DDCpars$eps, DDCpars$bruteForce, DDCpars$k, DDCpars$numiter,
                          DDCpars$precScale,
                          PACKAGE = 'cellWise'),
                    "std::range_error" = function(e){
